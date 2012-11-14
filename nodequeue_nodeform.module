@@ -1,0 +1,93 @@
+<?php
+/**
+ * @file
+ *   Nodequeue Node Form module
+ *
+ * @author
+ *   Lucian NEAG (Luxian)
+ */
+
+
+/**
+ * Implementation of hook_form_BASE_FORM_ID_alter().
+ */
+function nodequeue_nodeform_form_node_form_alter(&$form, &$form_state) {
+  $node = $form['#node'];
+
+  $queues = nodequeue_load_queues_by_type($node->type, 'tab');
+  if (!$queues) {
+    return; // No queues to display
+  }
+
+  $subqueues = nodequeue_get_subqueues_by_node($queues, $node);
+  nodequeue_set_subqueue_positions($subqueues, $node->nid);
+
+  // Add a new vertical panel in Additional Settings section
+  $form['nodequeue']['#type'] = 'fieldset';
+  $form['nodequeue']['#title'] = 'Nodequeue';
+  $form['nodequeue']['#group'] = 'additional_settings';
+  $form['nodequeue']['#tree'] = TRUE;
+
+  // Save and array with all the queues
+  $form['nodequeue']['queues']['#type'] = 'value';
+
+  foreach ($subqueues as $subqueue) {
+    $queue = $queues[$subqueue->qid];
+    $nid = nodequeue_get_content_id($queue, $node); // get tnid if available
+
+    if (module_exists('translation')) {
+      $subqueue = array($subqueue->sqid => $subqueue);
+      nodequeue_set_subqueue_positions($subqueue, $nid);
+      $subqueue = array_shift($subqueue);
+    }
+
+    $title = $queue->subqueue_title;
+    $title = nodequeue_title_substitute($title, $queue, $subqueue);
+    $key = "nq_{$queue->qid}_{$subqueue->sqid}_" . $nid;
+    $checked = !empty($subqueue->position);
+
+    //if (empty($subqueue->position)) {}
+    $form['nodequeue'][$key]['#type'] = 'checkbox';
+    $form['nodequeue'][$key]['#title'] = $title;
+    $form['nodequeue'][$key]['#default_value'] = (int)$checked;
+
+    // Save the value (easy for processing)
+    $form['nodequeue']['queues']['#value'][$key] = array(
+      'qid' => $queue->qid,
+      'sqid' => $subqueue->sqid,
+      'nid' => $nid,
+      'op' => $checked ? 'remove' : 'add',
+    );
+  }
+
+  // Add out processing function
+  $form['#submit'][] = '_nodequeue_nodeform_form_submit';
+}
+
+/**
+ * Submit function for adding/removing nodes from queue
+ */
+function _nodequeue_nodeform_form_submit($form, &$form_state) {
+  foreach($form_state['values']['nodequeue']['queues'] as $key => $info) {
+    if (isset($form_state['values']['nodequeue'][$key])) {
+      $old_value = $info['op'] == 'remove' ? 1 : 0;
+      $changed = $old_value != $form_state['values']['nodequeue'][$key];
+
+      if ($changed) {
+        $queue = nodequeue_load($info['qid']);
+        $subqueue = subqueue_load($info['sqid']);
+        $id = $info['nid']; // got from nodequeue_get_content_id() earlier
+
+        switch($info['op']) {
+          case 'add':
+            nodequeue_subqueue_add($queue, $subqueue, $id);
+            break;
+
+          case 'remove':
+            nodequeue_subqueue_remove_node($subqueue->sqid, $id);
+            break;
+        }
+      }
+    }
+  }
+}

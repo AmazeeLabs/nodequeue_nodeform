@@ -1,1 +1,6 @@
-name = Nodequeue NodeForm
+name = Nodequeue Node Forms
+description = Add Nodequeue options inside node edit forms.
+core = 7.x
+package = Nodequeue
+
+dependencies[] = nodequeue
