@@ -12,34 +12,45 @@
  * Implementation of hook_form_BASE_FORM_ID_alter().
  */
 function nodequeue_nodeform_form_node_form_alter(&$form, &$form_state) {
-  $node = $form['#node'];
+  $node = clone($form['#node']);
+
+  // If we do not provide an nid here, we will get some php warnings. So in case
+  // we are on the add form, where we do not have a node id, we just set it to
+  // 0. And we do this on the clone of the node, so the node itself in the form
+  // will not be affected. In the _nodequeue_nodeform_node_save() we will use
+  // the correct node id.
+  if (!isset($node->nid)) {
+    $node->nid = 0;
+  }
 
   $queues = nodequeue_load_queues_by_type($node->type, 'tab');
   if (!$queues) {
-    return; // No queues to display
+    // No queues to display.
+    return;
   }
 
   $subqueues = nodequeue_get_subqueues_by_node($queues, $node);
   nodequeue_set_subqueue_positions($subqueues, $node->nid);
 
-  // Add a new vertical panel in Additional Settings section
+  // Add a new vertical panel in Additional Settings section.
   $form['nodequeue']['#type'] = 'fieldset';
-  $form['nodequeue']['#title'] = 'Nodequeue';
+  $form['nodequeue']['#title'] = t('Nodequeue');
   $form['nodequeue']['#group'] = 'additional_settings';
   $form['nodequeue']['#tree'] = TRUE;
 
-  // Save and array with all the queues
+  // Save an array with all the queues.
   $form['nodequeue']['queues']['#type'] = 'value';
 
   foreach ($subqueues as $subqueue) {
     $queue = $queues[$subqueue->qid];
 
-    // Check permissions
+    // Check permissions.
     if (!nodequeue_node_and_queue_access($node, $queue, $subqueue)) {
       continue;
     }
 
-    $nid = nodequeue_get_content_id($queue, $node); // get tnid if available
+    // Get the tnid if available.
+    $nid = nodequeue_get_content_id($queue, $node);
 
     if (module_exists('translation')) {
       $subqueue = array($subqueue->sqid => $subqueue);
@@ -47,17 +58,15 @@ function nodequeue_nodeform_form_node_form_alter(&$form, &$form_state) {
       $subqueue = array_shift($subqueue);
     }
 
-    $title = $queue->subqueue_title;
-    $title = nodequeue_title_substitute($title, $queue, $subqueue);
+    $title = nodequeue_title_substitute($queue->subqueue_title, $queue, $subqueue);
     $key = "nq_{$queue->qid}_{$subqueue->sqid}_" . $nid;
     $checked = !empty($subqueue->position);
 
-    //if (empty($subqueue->position)) {}
     $form['nodequeue'][$key]['#type'] = 'checkbox';
     $form['nodequeue'][$key]['#title'] = $title;
     $form['nodequeue'][$key]['#default_value'] = (int)$checked;
 
-    // Save the value (easy for processing)
+    // Save the value (easy for processing).
     $form['nodequeue']['queues']['#value'][$key] = array(
       'qid' => $queue->qid,
       'sqid' => $subqueue->sqid,
@@ -98,7 +107,7 @@ function _nodequeue_nodeform_node_save($node) {
       if ($changed) {
         $queue = nodequeue_load($info['qid']);
         $subqueue = subqueue_load($info['sqid']);
-        $id = $info['nid'] == NULL ? $node->nid : $info['nid'];
+        $id = empty($info['nid']) ? $node->nid : $info['nid'];
 
         switch($info['op']) {
           case 'add':
