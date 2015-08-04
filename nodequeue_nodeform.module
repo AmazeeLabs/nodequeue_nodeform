@@ -30,7 +30,6 @@ function nodequeue_nodeform_form_node_form_alter(&$form, &$form_state) {
   }
 
   $subqueues = nodequeue_get_subqueues_by_node($queues, $node);
-  nodequeue_set_subqueue_positions($subqueues, $node->nid);
 
   // Add a new vertical panel in Additional Settings section.
   $form['nodequeue']['#type'] = 'fieldset';
@@ -49,14 +48,14 @@ function nodequeue_nodeform_form_node_form_alter(&$form, &$form_state) {
       continue;
     }
 
-    // Get the tnid if available.
+    // In case of node translations, we have to use the correct node id
+    // depending on the queue settings. The nodequeue_get_content_id() will
+    // return us either the node id or the translation id, so we use this
+    // instead of the $node->nid.
     $nid = nodequeue_get_content_id($queue, $node);
-
-    if (module_exists('translation')) {
-      $subqueue = array($subqueue->sqid => $subqueue);
-      nodequeue_set_subqueue_positions($subqueue, $nid);
-      $subqueue = array_shift($subqueue);
-    }
+    $subqueue = array($subqueue->sqid => $subqueue);
+    nodequeue_set_subqueue_positions($subqueue, $nid);
+    $subqueue = array_shift($subqueue);
 
     $title = nodequeue_title_substitute($queue->subqueue_title, $queue, $subqueue);
     $key = "nq_{$queue->qid}_{$subqueue->sqid}_" . $nid;
@@ -107,7 +106,7 @@ function _nodequeue_nodeform_node_save($node) {
       if ($changed) {
         $queue = nodequeue_load($info['qid']);
         $subqueue = subqueue_load($info['sqid']);
-        $id = empty($info['nid']) ? $node->nid : $info['nid'];
+        $id = empty($info['nid']) ? nodequeue_get_content_id($queue, $node) : $info['nid'];
 
         switch($info['op']) {
           case 'add':
